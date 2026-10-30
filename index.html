@@ -200,18 +200,18 @@ footer { color: var(--muted); font-size: 0.82rem; text-align: center; }
       <div>
         <h4>Non-branching</h4>
         <table>
-          <tr><td>¬¬A</td><td>A</td></tr>
-          <tr><td>A ∧ B</td><td>A, B</td></tr>
-          <tr><td>¬(A ∨ B)</td><td>¬A, ¬B</td></tr>
-          <tr><td>¬(A → B)</td><td>A, ¬B</td></tr>
+          <tr><td>¬¬φ</td><td>φ</td></tr>
+          <tr><td>(φ ∧ ψ)</td><td>φ, ψ</td></tr>
+          <tr><td>¬(φ ∨ ψ)</td><td>¬φ, ¬ψ</td></tr>
+          <tr><td>¬(φ → ψ)</td><td>φ, ¬ψ</td></tr>
         </table>
       </div>
       <div>
         <h4>Branching</h4>
         <table>
-          <tr><td>A ∨ B</td><td>A &nbsp;|&nbsp; B</td></tr>
-          <tr><td>A → B</td><td>¬A &nbsp;|&nbsp; B</td></tr>
-          <tr><td>¬(A ∧ B)</td><td>¬A &nbsp;|&nbsp; ¬B</td></tr>
+          <tr><td>(φ ∨ ψ)</td><td>φ &nbsp;|&nbsp; ψ</td></tr>
+          <tr><td>(φ → ψ)</td><td>¬φ &nbsp;|&nbsp; ψ</td></tr>
+          <tr><td>¬(φ ∧ ψ)</td><td>¬φ &nbsp;|&nbsp; ¬ψ</td></tr>
         </table>
       </div>
       <div>
@@ -228,11 +228,11 @@ footer { color: var(--muted); font-size: 0.82rem; text-align: center; }
         <table>
           <tr><td>φ(a), a = b</td><td>φ(b) <div class="small">replacing one or more occurrences of a with b (either way round)</div></td></tr>
           <tr><td>¬a = a</td><td>✗ <div class="small">the branch closes</div></td></tr>
-          <tr><td>A, ¬A</td><td>✗ <div class="small">a branch containing a formula and its negation closes</div></td></tr>
+          <tr><td>φ, ¬φ</td><td>✗ <div class="small">a branch containing a formula and its negation closes</div></td></tr>
         </table>
       </div>
     </div>
-    <p class="note" style="padding-bottom:20px">The model trees apply rules in this order: non-branching rules, then ∃, then ∀, then identity, then branching rules. Lines are numbered in the order they are written, so the left branch is finished before the right one is started. Your own tree may apply rules in a different order and still be correct.</p>
+    <p class="note" style="padding-bottom:20px">In the propositional rules, φ and ψ stand for any formulas. The model trees apply rules in this order: non-branching rules, then ∃, then ∀, then identity, then branching rules. Lines are numbered in the order they are written, so the left branch is finished before the right one is started. Your own tree may apply rules in a different order and still be correct.</p>
   </details>
   <footer>Questions are generated at random; every answer is checked by the tree method, and every countermodel is checked against the formulas.</footer>
 </div>
@@ -539,9 +539,9 @@ const LogicEngine = (function () {
 
   // ---------- Propositional generation ----------
   const PROP_CFG = {
-    easy: { atoms: ['p', 'q'], depth: 2, prem: [1, 2], set: [2, 2], maxLines: 16, maxLen: 13 },
-    medium: { atoms: ['p', 'q', 'r'], depth: 2, prem: [2, 3], set: [2, 3], maxLines: 28, maxLen: 17 },
-    hard: { atoms: ['p', 'q', 'r', 's'], depth: 3, prem: [2, 3], set: [3, 3], maxLines: 44, maxLen: 26 },
+    easy: { atoms: ['A', 'B'], depth: 2, prem: [1, 2], set: [2, 2], maxLines: 16, maxLen: 13 },
+    medium: { atoms: ['A', 'B', 'C'], depth: 2, prem: [2, 3], set: [2, 3], maxLines: 28, maxLen: 17 },
+    hard: { atoms: ['A', 'B', 'C', 'D'], depth: 3, prem: [2, 3], set: [3, 3], maxLines: 44, maxLen: 26 },
   };
   function rp(atoms, d) {
     const leafP = d <= 0 ? 1 : d === 1 ? 0.4 : 0.15;
@@ -754,6 +754,8 @@ if (typeof module !== 'undefined') module.exports = LogicEngine;
     set(k, v) { try { localStorage.setItem('ttt-' + k, JSON.stringify(v)); } catch (e) { } },
   };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // propositional formulas: outer brackets kept, elementary statements in italics
+  const fm = f => { const prop = state.q && state.q.logic === 'prop'; const t = esc(E.show(f, !prop)); return prop ? t.replace(/[A-D]/g, '<i>$&</i>') : t; };
   const val = n => document.querySelector(`input[name="${n}"]:checked`).value;
 
   // restore settings
@@ -788,10 +790,10 @@ if (typeof module !== 'undefined') module.exports = LogicEngine;
 
   function questionHTML(q) {
     if (q.type === 'arg') {
-      return `<div class="argument logic">${q.premises.map(f => `<div>${esc(E.show(f))}</div>`).join('')}<div class="bar" aria-hidden="true"></div><div><span aria-label="therefore">∴</span>&nbsp; ${esc(E.show(q.conclusion))}</div></div>`;
+      return `<div class="argument logic">${q.premises.map(f => `<div>${fm(f)}</div>`).join('')}<div class="bar" aria-hidden="true"></div><div><span aria-label="therefore">∴</span>&nbsp; ${fm(q.conclusion)}</div></div>`;
     }
-    if (q.type === 'lt') return `<div class="single logic">${esc(E.show(q.formula))}</div>`;
-    return `<div class="setlist logic">${q.set.map(f => `<span>${esc(E.show(f))}</span>`).join('')}</div>`;
+    if (q.type === 'lt') return `<div class="single logic">${fm(q.formula)}</div>`;
+    return `<div class="setlist logic">${q.set.map(f => `<span>${fm(f)}</span>`).join('')}</div>`;
   }
 
   function newQuestion() {
@@ -857,7 +859,7 @@ if (typeof module !== 'undefined') module.exports = LogicEngine;
     let h = '<div class="tn"><div class="tlines">';
     for (const l of node.lines) {
       const tick = l.tick ? `<span class="tk" data-req="${l.tickAt || l.n}" aria-label="ticked">✓</span>` : '';
-      h += `<div class="tl" data-req="${l.n}"><span class="ln">${l.n}.</span><span class="fm"><span class="tf">${esc(l.text)}</span>${tick}</span><span class="tj">${esc(l.just)}</span></div>`;
+      h += `<div class="tl" data-req="${l.n}"><span class="ln">${l.n}.</span><span class="fm"><span class="tf">${fm(l.f)}</span>${tick}</span><span class="tj">${esc(l.just)}</span></div>`;
     }
     h += '</div>';
     if (node.end) {
@@ -884,7 +886,7 @@ if (typeof module !== 'undefined') module.exports = LogicEngine;
     let rows = '';
     if (!fo) {
       const atoms = Object.keys(M.props).sort();
-      rows = atoms.map(a => `<dt class="logic">${a}</dt><dd>${M.fixed[a] ? (M.props[a] ? 'T' : 'F') : 'T or F <span class="note">(not settled by the branch)</span>'}</dd>`).join('');
+      rows = atoms.map(a => `<dt class="logic"><i>${a}</i></dt><dd>${M.fixed[a] ? (M.props[a] ? 'T' : 'F') : 'T or F <span class="note">(not settled by the branch)</span>'}</dd>`).join('');
     } else {
       rows += `<dt>Domain</dt><dd>{${M.domain.join(', ')}}</dd>`;
       const names = Object.keys(M.ref).sort();
