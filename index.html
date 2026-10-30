@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Truth Tree Trainer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:wght@400;600&display=swap">
+<style>
+/* Layout: single working column — settings strip, question sheet, model answer below; reference rules folded at the foot. */
+:root {
+  --bg: #F3F5F9;
+  --sheet: #FFFFFF;
+  --ink: #1B2236;
+  --muted: #5B6680;
+  --rule: #C9D0DE;
+  --tint: #E8ECF4;
+  --navy: #2E3A5C;
+  --red: #B0303F;
+  --good: #2D7A55;
+  --good-bg: #E3F2EA;
+  --bad-bg: #F8E6E8;
+  --focus: #3D5BD9;
+  --f-display: "Spectral", "Cambria", Georgia, serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-logic: "STIX Two Text", "Cambria Math", "Cambria", "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151E; --sheet: #191F2C; --ink: #E5E9F2; --muted: #9AA5BE; --rule: #39425A; --tint: #222A3B;
+    --navy: #9DB0E6; --red: #EE7480; --good: #6CC79A; --good-bg: #183026; --bad-bg: #3A1D23; --focus: #8EA6FF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151E; --sheet: #191F2C; --ink: #E5E9F2; --muted: #9AA5BE; --rule: #39425A; --tint: #222A3B;
+  --navy: #9DB0E6; --red: #EE7480; --good: #6CC79A; --good-bg: #183026; --bad-bg: #3A1D23; --focus: #8EA6FF;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.9rem, 4.5vw, 2.6rem); line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .tree-glyph { color: var(--red); }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
+.score { font-size: 0.9rem; color: var(--muted); display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+.score strong { color: var(--ink); font-weight: 600; }
+.linkish { background: none; border: 0; padding: 0; color: var(--navy); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* settings */
+.settings { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; }
+.group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.group > .label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--tint); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 0.92rem; color: var(--muted); user-select: none; }
+.seg input:checked + label { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(20, 30, 60, 0.12); }
+.seg input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 1px; }
+.check { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 0.92rem; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--navy); }
+.check.disabled { color: var(--muted); opacity: 0.6; cursor: default; }
+.btn { font: inherit; font-weight: 600; border-radius: 10px; padding: 10px 18px; cursor: pointer; border: 1.5px solid transparent; }
+.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn-primary { background: var(--navy); color: var(--sheet); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--navy); border-color: var(--rule); }
+.btn-ghost:hover { background: var(--tint); }
+.btn:disabled { opacity: 0.45; cursor: default; filter: none; }
+
+/* question sheet */
+.sheet { background: var(--sheet); border-radius: 16px; padding: clamp(18px, 4vw, 32px); box-shadow: 0 1px 3px rgba(20, 30, 60, 0.06), 0 8px 24px rgba(20, 30, 60, 0.05); display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.qhead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; }
+.qhead h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.45rem; margin: 0; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 0.75rem; padding: 3px 9px; border-radius: 99px; background: var(--tint); color: var(--muted); }
+.qbody { display: flex; justify-content: center; padding: 8px 0; overflow-x: auto; }
+.logic { font-family: var(--f-logic); }
+.argument { display: inline-flex; flex-direction: column; align-items: center; font-size: clamp(1.25rem, 3.4vw, 1.6rem); gap: 4px; }
+.argument .bar { align-self: stretch; height: 0; border-top: 1.5px solid var(--rule); margin: 6px -16px; }
+.single { font-size: clamp(1.3rem, 3.6vw, 1.75rem); text-align: center; }
+.setlist { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; font-size: clamp(1.15rem, 3.2vw, 1.5rem); }
+.setlist span { background: var(--tint); padding: 6px 14px; border-radius: 10px; white-space: nowrap; }
+.answers { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.answers .btn { min-width: 170px; }
+.answers .btn.picked-right { background: var(--good-bg); color: var(--good); border-color: var(--good); }
+.answers .btn.picked-wrong { background: var(--bad-bg); color: var(--red); border-color: var(--red); }
+.feedback { border-radius: 12px; padding: 12px 16px; font-weight: 500; }
+.feedback.right { background: var(--good-bg); color: var(--good); }
+.feedback.wrong { background: var(--bad-bg); color: var(--red); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; border-top: 1px solid var(--tint); padding-top: 18px; }
+.loading { text-align: center; color: var(--muted); padding: 28px 0; }
+
+/* model answer */
+.model { display: flex; flex-direction: column; gap: 18px; }
+.model h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.25rem; margin: 0; }
+.verdict { display: inline-block; font-weight: 600; padding: 6px 14px; border-radius: 99px; color: var(--sheet); }
+.verdict.yes { background: var(--navy); }
+.verdict.no { background: var(--red); }
+.explain { margin: 0; max-width: 68ch; color: var(--ink); }
+.treebox { background: var(--tint); border-radius: 14px; padding: 18px 14px; overflow-x: auto; }
+.tree { width: max-content; margin: 0 auto; }
+.tn { display: flex; flex-direction: column; align-items: center; }
+.tlines { display: grid; grid-template-columns: 1fr auto 1fr; column-gap: 10px; row-gap: 2px; align-items: baseline; }
+.tl { display: contents; }
+.tl > span { white-space: nowrap; }
+.tl .ln { text-align: right; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; font-family: var(--f-body); }
+.tl .tf { font-family: var(--f-logic); font-size: 1.12rem; }
+.tl .tk { color: var(--red); font-weight: 700; margin-left: 4px; font-size: 0.95rem; }
+.tl .tj { color: var(--muted); font-size: 0.78rem; font-family: var(--f-body); }
+.tl .fm { text-align: center; }
+.te { margin-top: 4px; font-size: 0.9rem; font-weight: 600; padding: 1px 10px; border-radius: 99px; }
+.te.closed { color: var(--red); }
+.te.open { color: var(--navy); }
+.te.cm { background: var(--sheet); outline: 1.5px solid var(--navy); }
+.kids { display: flex; justify-content: center; align-items: flex-start; gap: 28px; position: relative; padding-top: 22px; margin-top: 2px; }
+.kids::before { content: ""; position: absolute; top: 0; left: 50%; height: 10px; border-left: 1.5px solid var(--rule); }
+.kid { position: relative; display: flex; justify-content: center; }
+.kid::before { content: ""; position: absolute; top: -12px; left: 50%; height: 12px; border-left: 1.5px solid var(--rule); }
+.kid:first-child::after { content: ""; position: absolute; top: -12px; left: 50%; right: -14px; border-top: 1.5px solid var(--rule); }
+.kid:last-child::after { content: ""; position: absolute; top: -12px; left: -14px; right: 50%; border-top: 1.5px solid var(--rule); }
+.pending { visibility: hidden; }
+.stepper { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stepper .count { color: var(--muted); font-size: 0.88rem; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.stepper .btn { padding: 7px 14px; font-size: 0.9rem; }
+.cmodel { border: 1.5px solid var(--navy); border-radius: 14px; padding: 14px 18px; display: flex; flex-direction: column; gap: 6px; }
+.cmodel .title { font-weight: 600; color: var(--navy); }
+.cmodel dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+.cmodel dt { color: var(--muted); }
+.cmodel dd { margin: 0; font-family: var(--f-logic); font-size: 1.08rem; min-width: 0; overflow-wrap: anywhere; }
+.note { color: var(--muted); font-size: 0.9rem; margin: 0; max-width: 68ch; }
+
+/* reference */
+details.ref { background: var(--sheet); border-radius: 16px; padding: 4px clamp(18px, 4vw, 32px); }
+details.ref summary { cursor: pointer; padding: 16px 0; font-family: var(--f-display); font-weight: 600; font-size: 1.2rem; }
+details.ref summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.refgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 28px; padding-bottom: 22px; }
+.refgrid h4 { margin: 0 0 8px; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.refgrid table { border-collapse: collapse; width: 100%; }
+.refgrid td { padding: 5px 0; border-bottom: 1px solid var(--tint); vertical-align: top; }
+.refgrid td:first-child { font-family: var(--f-logic); font-size: 1.05rem; white-space: nowrap; padding-right: 14px; }
+.refgrid td:last-child { font-family: var(--f-logic); font-size: 1.05rem; }
+.refgrid .small { font-family: var(--f-body); font-size: 0.82rem; color: var(--muted); }
+footer { color: var(--muted); font-size: 0.82rem; text-align: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .tl, .te, .kids { transition: opacity 0.2s ease; }
+}
+@media (max-width: 520px) {
+  .answers .btn { min-width: 0; flex: 1 1 140px; }
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Truth Tree Trainer</h1>
+      <p class="lede">Practice questions for propositional and first-order logic, each with a model tree. Choose the kind of question, decide your answer, then compare your tree with the model.</p>
+    </div>
+    <div class="score" aria-live="polite"><span id="scoreText">No answers yet</span><button class="linkish" id="resetScore" type="button" hidden>Reset</button></div>
+  </header>
+
+  <section class="settings" aria-label="Question settings">
+    <div class="group"><span class="label" id="lgLogic">Logic</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lgLogic">
+        <input type="radio" name="logic" id="logic-prop" value="prop" checked><label for="logic-prop">Propositional</label>
+        <input type="radio" name="logic" id="logic-fo" value="fo"><label for="logic-fo">First-order</label>
+      </div>
+    </div>
+    <div class="group"><span class="label" id="lgType">Question</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lgType">
+        <input type="radio" name="type" id="type-arg" value="arg" checked><label for="type-arg">Validity</label>
+        <input type="radio" name="type" id="type-lt" value="lt"><label for="type-lt" id="ltLabel">Tautology</label>
+        <input type="radio" name="type" id="type-cons" value="cons"><label for="type-cons">Consistency</label>
+        <input type="radio" name="type" id="type-mix" value="mix"><label for="type-mix">Mixed</label>
+      </div>
+    </div>
+    <div class="group"><span class="label" id="lgLevel">Level</span>
+      <div class="seg" role="radiogroup" aria-labelledby="lgLevel">
+        <input type="radio" name="level" id="level-easy" value="easy" checked><label for="level-easy">Easy</label>
+        <input type="radio" name="level" id="level-medium" value="medium"><label for="level-medium">Medium</label>
+        <input type="radio" name="level" id="level-hard" value="hard"><label for="level-hard">Hard</label>
+      </div>
+    </div>
+    <label class="check disabled" id="idWrap"><input type="checkbox" id="identity" disabled> Include identity</label>
+  </section>
+
+  <main class="sheet" id="sheet" aria-live="polite"></main>
+
+  <details class="ref" id="ref">
+    <summary>The tree rules</summary>
+    <div class="refgrid">
+      <div>
+        <h4>Non-branching</h4>
+        <table>
+          <tr><td>¬¬A</td><td>A</td></tr>
+          <tr><td>A ∧ B</td><td>A, B</td></tr>
+          <tr><td>¬(A ∨ B)</td><td>¬A, ¬B</td></tr>
+          <tr><td>¬(A → B)</td><td>A, ¬B</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Branching</h4>
+        <table>
+          <tr><td>A ∨ B</td><td>A &nbsp;|&nbsp; B</td></tr>
+          <tr><td>A → B</td><td>¬A &nbsp;|&nbsp; B</td></tr>
+          <tr><td>¬(A ∧ B)</td><td>¬A &nbsp;|&nbsp; ¬B</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Quantifiers</h4>
+        <table>
+          <tr><td>∀xφ</td><td>φ(a/x) <div class="small">for any name a on the branch, or a new name if there is none. Never ticked: reapply for each name.</div></td></tr>
+          <tr><td>∃xφ</td><td>φ(a/x) <div class="small">where a is new to the branch</div></td></tr>
+          <tr><td>¬∀xφ</td><td>∃x¬φ</td></tr>
+          <tr><td>¬∃xφ</td><td>∀x¬φ</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Identity and closure</h4>
+        <table>
+          <tr><td>φ(a), a = b</td><td>φ(b) <div class="small">replacing one or more occurrences of a with b (either way round)</div></td></tr>
+          <tr><td>¬a = a</td><td>✗ <div class="small">the branch closes</div></td></tr>
+          <tr><td>A, ¬A</td><td>✗ <div class="small">a branch containing a formula and its negation closes</div></td></tr>
+        </table>
+      </div>
+    </div>
+    <p class="note" style="padding-bottom:20px">The model trees apply rules in this order: non-branching rules, then ∃, then ∀, then identity, then branching rules. Lines are numbered in the order they are written, so the left branch is finished before the right one is started. Your own tree may apply rules in a different order and still be correct.</p>
+  </details>
+  <footer>Questions are generated at random; every answer is checked by the tree method, and every countermodel is checked against the formulas.</footer>
+</div>
+
+<script>
+// ===== Logic engine: formulas, tree prover, models, question generation =====
+const LogicEngine = (function () {
+  'use strict';
+  const P = (p, ...args) => ({ t: 'pred', p, args });
+  const Eq = (a, b) => ({ t: 'eq', a, b });
+  const Not = f => ({ t: 'not', f });
+  const Bin = (t, l, r) => ({ t, l, r });
+  const And = (l, r) => Bin('and', l, r);
+  const Or = (l, r) => Bin('or', l, r);
+  const Imp = (l, r) => Bin('imp', l, r);
+  const All = (v, f) => ({ t: 'all', v, f });
+  const Ex = (v, f) => ({ t: 'ex', v, f });
+  const SYM = { and: '∧', or: '∨', imp: '→' };
+  const NAMES = 'abcdefgh';
+  const isName = s => NAMES.includes(s);
+  const isBin = f => f.t === 'and' || f.t === 'or' || f.t === 'imp';
+
+  function show(f, top = true) {
+    switch (f.t) {
+      case 'pred': return f.p + f.args.join('');
+      case 'eq': return f.a + ' = ' + f.b;
+      case 'not': return '¬' + show(f.f, false);
+      case 'and': case 'or': case 'imp': {
+        const s = show(f.l, false) + ' ' + SYM[f.t] + ' ' + show(f.r, false);
+        return top ? s : '(' + s + ')';
+      }
+      case 'all': case 'ex': {
+        const q = f.t === 'all' ? '∀' : '∃';
+        const b = f.f;
+        const needParens = b.t === 'eq' || (b.t === 'not' && b.f.t === 'eq');
+        return q + f.v + (needParens ? '(' + show(b) + ')' : show(b, false));
+      }
+    }
+    throw new Error('bad formula');
+  }
+  const key = f => show(f);
+
+  function subst(f, v, c) {
+    switch (f.t) {
+      case 'pred': return P(f.p, ...f.args.map(x => (x === v ? c : x)));
+      case 'eq': return Eq(f.a === v ? c : f.a, f.b === v ? c : f.b);
+      case 'not': return Not(subst(f.f, v, c));
+      case 'and': case 'or': case 'imp': return Bin(f.t, subst(f.l, v, c), subst(f.r, v, c));
+      case 'all': case 'ex': return f.v === v ? f : { t: f.t, v: f.v, f: subst(f.f, v, c) };
+    }
+  }
+  function namesIn(f, set) {
+    switch (f.t) {
+      case 'pred': f.args.forEach(a => isName(a) && set.add(a)); break;
+      case 'eq': [f.a, f.b].forEach(a => isName(a) && set.add(a)); break;
+      case 'not': namesIn(f.f, set); break;
+      case 'all': case 'ex': namesIn(f.f, set); break;
+      default: namesIn(f.l, set); namesIn(f.r, set);
+    }
+    return set;
+  }
+  function predsIn(f, map) {
+    switch (f.t) {
+      case 'pred': map.set(f.p, f.args.length); break;
+      case 'eq': map.set('=', 2); break;
+      case 'not': case 'all': case 'ex': predsIn(f.f, map); break;
+      default: predsIn(f.l, map); predsIn(f.r, map);
+    }
+    return map;
+  }
+  function size(f) {
+    switch (f.t) {
+      case 'pred': case 'eq': return 1;
+      case 'not': case 'all': case 'ex': return 1 + size(f.f);
+      default: return 1 + size(f.l) + size(f.r);
+    }
+  }
+  // no binary node with identical sides, no triple negation
+  function nontrivial(f) {
+    switch (f.t) {
+      case 'pred': case 'eq': return true;
+      case 'not': return !(f.f.t === 'not' && f.f.f.t === 'not') && nontrivial(f.f);
+      case 'all': case 'ex': return nontrivial(f.f);
+      default: return key(f.l) !== key(f.r) && key(f.l) !== key(Not(f.r)) && key(f.r) !== key(Not(f.l)) && nontrivial(f.l) && nontrivial(f.r);
+    }
+  }
+
+  // ---------- Tree prover ----------
+  function kind(f) {
+    if (f.t === 'not') return { not: 'notnot', and: 'notand', or: 'notor', imp: 'notimp', all: 'notall', ex: 'notex' }[f.f.t] || 'lit';
+    return { and: 'and', or: 'or', imp: 'imp', all: 'all', ex: 'ex' }[f.t] || 'lit';
+  }
+  const NONBRANCH = { notnot: '¬¬', and: '∧', notor: '¬∨', notimp: '¬→', notall: '¬∀', notex: '¬∃' };
+  const BRANCH = { or: '∨', imp: '→', notand: '¬∧' };
+  const isLit = f => f.t === 'pred' || f.t === 'eq' || (f.t === 'not' && (f.f.t === 'pred' || f.f.t === 'eq'));
+
+  function variants(f, from, to) {
+    // all ways of replacing a non-empty subset of occurrences of `from` with `to` in a literal
+    const neg = f.t === 'not';
+    const a = neg ? f.f : f;
+    const terms = a.t === 'pred' ? a.args.slice() : [a.a, a.b];
+    const pos = terms.map((t, i) => (t === from ? i : -1)).filter(i => i >= 0);
+    const out = [];
+    for (let m = 1; m < (1 << pos.length); m++) {
+      const ts = terms.slice();
+      pos.forEach((p, k) => { if (m & (1 << k)) ts[p] = to; });
+      const g = a.t === 'pred' ? P(a.p, ...ts) : Eq(ts[0], ts[1]);
+      out.push(neg ? Not(g) : g);
+    }
+    return out;
+  }
+
+  function prove(items, opts = {}) {
+    const maxLines = opts.maxLines || 80, maxNames = opts.maxNames || 4;
+    let num = 0, aborted = false;
+    const opens = [];
+    const root = { lines: [], kids: null, end: null };
+
+    function close(b, by) { b.closed = true; b.node.end = { closed: true, by }; }
+    function add(b, f, just, force) {
+      const k = key(f);
+      if (!force && b.keys.has(k)) return null;
+      num++;
+      if (num > maxLines) aborted = true;
+      const line = { n: num, f, text: k, just, tick: false };
+      b.node.lines.push(line);
+      const e = { f, key: k, line, done: false, inst: new Set() };
+      b.entries.push(e);
+      if (!b.keys.has(k)) b.keys.set(k, e);
+      namesIn(f, b.names);
+      if (f.t === 'not' && f.f.t === 'eq' && f.f.a === f.f.b) { close(b, [num]); return e; }
+      let other = b.keys.get(key(Not(f)));
+      if (!other && f.t === 'not') other = b.keys.get(key(f.f));
+      if (other) close(b, [other.line.n, num]);
+      return e;
+    }
+    function copy(b, node) {
+      const nb = { entries: [], keys: new Map(), names: new Set(b.names), node, closed: false };
+      for (const e of b.entries) {
+        const ne = Object.assign({}, e, { inst: new Set(e.inst) });
+        nb.entries.push(ne);
+        if (!nb.keys.has(ne.key)) nb.keys.set(ne.key, ne);
+      }
+      return nb;
+    }
+    function fresh(b) {
+      if (b.names.size >= maxNames) return null;
+      for (const c of NAMES) if (!b.names.has(c)) return c;
+      return null;
+    }
+    function closesWith(b, v) {
+      if (v.t === 'not' && v.f.t === 'eq' && v.f.a === v.f.b) return true;
+      if (b.keys.has(key(Not(v)))) return true;
+      return v.t === 'not' && b.keys.has(key(v.f));
+    }
+    function eqStep(b) {
+      const eqs = b.entries.filter(e => e.f.t === 'eq' && e.f.a !== e.f.b);
+      if (!eqs.length) return false;
+      const lits = b.entries.filter(e => isLit(e.f));
+      for (const q of eqs) {
+        for (const [from, to] of [[q.f.a, q.f.b], [q.f.b, q.f.a]]) {
+          for (const L of lits) {
+            for (const v of variants(L.f, from, to)) {
+              if (b.keys.has(key(v))) continue;
+              if (closesWith(b, v)) {
+                const refs = L === q ? `${q.line.n}` : `${L.line.n}, ${q.line.n}`;
+                add(b, v, `${refs}, =`);
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    }
+    function applyNB(b, e) {
+      const f = e.f, n = e.line.n, k = kind(f), j = `${n}, ${NONBRANCH[k]}`;
+      e.done = true; e.line.tick = true; e.line.tickAt = num + 1;
+      const out = [];
+      if (k === 'notnot') out.push(f.f.f);
+      else if (k === 'and') out.push(f.l, f.r);
+      else if (k === 'notor') out.push(Not(f.f.l), Not(f.f.r));
+      else if (k === 'notimp') out.push(f.f.l, Not(f.f.r));
+      else if (k === 'notall') out.push(Ex(f.f.v, Not(f.f.f)));
+      else if (k === 'notex') out.push(All(f.f.v, Not(f.f.f)));
+      for (const g of out) { if (b.closed) break; add(b, g, j); }
+    }
+    function run(b) {
+      while (!b.closed) {
+        if (aborted) return;
+        let e = b.entries.find(x => !x.done && NONBRANCH[kind(x.f)]);
+        if (e) { applyNB(b, e); continue; }
+        e = b.entries.find(x => !x.done && kind(x.f) === 'ex');
+        if (e) {
+          const c = fresh(b);
+          if (!c) { aborted = true; return; }
+          e.done = true; e.line.tick = true; e.line.tickAt = num + 1;
+          add(b, subst(e.f.f, e.f.v, c), `${e.line.n}, ∃ (${c} new)`);
+          continue;
+        }
+        let did = false;
+        const unis = b.entries.filter(x => kind(x.f) === 'all');
+        if (unis.length) {
+          if (b.names.size === 0) b.names.add('a');
+          outer: for (const u of unis) {
+            for (const c of [...b.names].sort()) {
+              if (u.inst.has(c)) continue;
+              u.inst.add(c);
+              const r = add(b, subst(u.f.f, u.f.v, c), `${u.line.n}, ∀`);
+              if (r || b.closed) { did = true; break outer; }
+            }
+          }
+        }
+        if (did) continue;
+        if (eqStep(b)) continue;
+        e = b.entries.find(x => !x.done && BRANCH[kind(x.f)]);
+        if (e) {
+          e.done = true; e.line.tick = true; e.line.tickAt = num + 1;
+          const f = e.f, k = kind(f);
+          const [L, R] = k === 'or' ? [f.l, f.r] : k === 'imp' ? [Not(f.l), f.r] : [Not(f.f.l), Not(f.f.r)];
+          const n1 = { lines: [], kids: null, end: null }, n2 = { lines: [], kids: null, end: null };
+          b.node.kids = [n1, n2];
+          const b1 = copy(b, n1), b2 = copy(b, n2), j = `${e.line.n}, ${BRANCH[k]}`;
+          add(b1, L, j, true); run(b1);
+          if (aborted) return;
+          add(b2, R, j, true); run(b2);
+          return;
+        }
+        b.node.end = { closed: false };
+        opens.push(b);
+        return;
+      }
+    }
+    const b0 = { entries: [], keys: new Map(), names: new Set(), node: root, closed: false };
+    for (const it of items) { if (!b0.closed) add(b0, it.f, it.just, true); }
+    run(b0);
+    if (opens[0]) opens[0].node.end.countermodel = true;
+    return { root, closed: !aborted && opens.length === 0, aborted, open: opens[0] || null, lines: num };
+  }
+
+  // ---------- Models ----------
+  function modelFromBranch(b, formulas) {
+    const preds = new Map();
+    formulas.forEach(f => predsIn(f, preds));
+    const names = [...b.names].sort();
+    formulas.forEach(f => namesIn(f, new Set()).forEach(n => { if (!names.includes(n)) names.push(n); }));
+    names.sort();
+    const parent = {};
+    names.forEach(n => (parent[n] = n));
+    const find = x => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+    b.entries.forEach(e => { if (e.f.t === 'eq') { const a = find(e.f.a), c = find(e.f.b); if (a !== c) parent[c < a ? a : c] = c < a ? c : a; } });
+    const reps = [];
+    names.forEach(n => { const r = find(n); if (!reps.includes(r)) reps.push(r); });
+    const domainSize = Math.max(1, reps.length);
+    const ref = {};
+    names.forEach(n => (ref[n] = reps.indexOf(find(n)) + 1));
+    const ext = {}, props = {};
+    preds.forEach((ar, p) => { if (p !== '=') { if (ar === 0) props[p] = false; else ext[p] = new Set(); } });
+    b.entries.forEach(e => {
+      if (e.f.t === 'pred') {
+        if (e.f.args.length === 0) props[e.f.p] = true;
+        else ext[e.f.p].add(e.f.args.map(a => ref[a]).join(','));
+      }
+    });
+    // propositional: which letters are fixed by the branch
+    const fixed = {};
+    b.entries.forEach(e => {
+      if (e.f.t === 'pred' && !e.f.args.length) fixed[e.f.p] = true;
+      if (e.f.t === 'not' && e.f.f.t === 'pred' && !e.f.f.args.length) fixed[e.f.f.p] = true;
+    });
+    return { domain: Array.from({ length: domainSize }, (_, i) => i + 1), ref, ext, props, fixed, preds };
+  }
+  function evalF(f, M, env = {}) {
+    const val = t => (t in env ? env[t] : M.ref[t]);
+    switch (f.t) {
+      case 'pred': return f.args.length === 0 ? !!M.props[f.p] : M.ext[f.p].has(f.args.map(val).join(','));
+      case 'eq': return val(f.a) === val(f.b);
+      case 'not': return !evalF(f.f, M, env);
+      case 'and': return evalF(f.l, M, env) && evalF(f.r, M, env);
+      case 'or': return evalF(f.l, M, env) || evalF(f.r, M, env);
+      case 'imp': return !evalF(f.l, M, env) || evalF(f.r, M, env);
+      case 'all': return M.domain.every(d => evalF(f.f, M, Object.assign({}, env, { [f.v]: d })));
+      case 'ex': return M.domain.some(d => evalF(f.f, M, Object.assign({}, env, { [f.v]: d })));
+    }
+  }
+  // truth tables (propositional)
+  function atomsOf(fs) { const s = new Set(); fs.forEach(f => predsIn(f, new Map()).forEach((a, p) => s.add(p))); return [...s].sort(); }
+  function* valuations(atoms) {
+    for (let m = 0; m < (1 << atoms.length); m++) {
+      const props = {};
+      atoms.forEach((a, i) => (props[a] = !!(m & (1 << i))));
+      yield { domain: [1], ref: {}, ext: {}, props };
+    }
+  }
+  function satisfiable(fs) { for (const M of valuations(atomsOf(fs))) if (fs.every(f => evalF(f, M))) return true; return false; }
+
+  // ---------- Random helpers ----------
+  const rnd = Math.random;
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const pickW = ws => { let t = ws.reduce((s, w) => s + w[1], 0) * rnd(); for (const [v, w] of ws) { if ((t -= w) < 0) return v; } return ws[0][0]; };
+  const maybeNeg = (f, p) => (rnd() < p ? Not(f) : f);
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const randInt = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
+
+  // ---------- Propositional generation ----------
+  const PROP_CFG = {
+    easy: { atoms: ['p', 'q'], depth: 2, prem: [1, 2], set: [2, 2], maxLines: 16, maxLen: 13 },
+    medium: { atoms: ['p', 'q', 'r'], depth: 2, prem: [2, 3], set: [2, 3], maxLines: 28, maxLen: 17 },
+    hard: { atoms: ['p', 'q', 'r', 's'], depth: 3, prem: [2, 3], set: [3, 3], maxLines: 44, maxLen: 26 },
+  };
+  function rp(atoms, d) {
+    const leafP = d <= 0 ? 1 : d === 1 ? 0.4 : 0.15;
+    if (rnd() < leafP) return maybeNeg(P(pick(atoms)), 0.25);
+    if (rnd() < 0.12) { const s = rp(atoms, d - 1); return isBin(s) ? Not(s) : s; }
+    return Bin(pickW([['and', 3], ['or', 3], ['imp', 4]]), rp(atoms, d - 1), rp(atoms, d - 1));
+  }
+
+  // ---------- First-order generation ----------
+  const FO_CFG = {
+    easy: { level: 0, preds: ['F', 'G'], names: ['a'], prem: [1, 2], set: [2, 2], maxLines: 18, maxNames: 3, rel: false, maxLen: 16 },
+    medium: { level: 1, preds: ['F', 'G', 'H'], names: ['a', 'b'], prem: [2, 2], set: [2, 3], maxLines: 30, maxNames: 3, rel: false, maxLen: 20 },
+    hard: { level: 2, preds: ['F', 'G', 'H'], names: ['a', 'b'], prem: [2, 2], set: [3, 3], maxLines: 48, maxNames: 4, rel: true, maxLen: 24 },
+  };
+  function matrix(v, cfg) {
+    const k = cfg.level === 0 ? pickW([[1, 1], [2, 2]]) : pickW([[1, 2], [2, 4], [3, 1]]);
+    const ps = shuffle(cfg.preds.slice());
+    if (k === 1) return maybeNeg(P(ps[0], v), 0.25);
+    if (k === 2) return Bin(pickW([['imp', 4], ['and', 3], ['or', 2]]), maybeNeg(P(ps[0], v), 0.15), maybeNeg(P(ps[1], v), 0.2));
+    return Imp(P(ps[0], v), Bin(pick(['and', 'or']), P(ps[1], v), maybeNeg(P(ps[2] || ps[0], v), 0.2)));
+  }
+  const quant = cfg => ({ t: pick(['all', 'ex']), v: 'x', f: matrix('x', cfg) });
+  function ground(cfg) {
+    const n = pick(cfg.names), ps = shuffle(cfg.preds.slice());
+    if (cfg.level > 0 && rnd() < 0.3) return Bin(pick(['imp', 'or', 'and']), maybeNeg(P(ps[0], n), 0.2), maybeNeg(P(ps[1], n), 0.2));
+    return maybeNeg(P(ps[0], n), 0.35);
+  }
+  function relational(cfg) {
+    const Q = () => pick(['all', 'ex']);
+    const [F] = shuffle(cfg.preds.slice());
+    const t = randInt(0, 7);
+    switch (t) {
+      case 0: return maybeNeg({ t: Q(), v: 'x', f: { t: Q(), v: 'y', f: P('R', 'x', 'y') } }, 0.15);
+      case 1: return All('x', Imp(P(F, 'x'), { t: Q(), v: 'y', f: P('R', 'x', 'y') }));
+      case 2: return Ex('x', And(P(F, 'x'), { t: Q(), v: 'y', f: P('R', 'y', 'x') }));
+      case 3: return All('x', All('y', Imp(P('R', 'x', 'y'), P('R', 'y', 'x'))));
+      case 4: return { t: Q(), v: 'x', f: maybeNeg(P('R', 'x', 'x'), 0.4) };
+      case 5: return maybeNeg(P('R', ...shuffle(['a', 'b'])), 0.4);
+      case 6: return All('x', Imp(P('R', 'a', 'x'), P(F, 'x')));
+      default: return { t: Q(), v: 'x', f: P('R', 'x', 'a') };
+    }
+  }
+  function foFormula(cfg) {
+    const r = rnd();
+    if (cfg.rel && r < 0.45) return relational(cfg);
+    if (r < 0.62) return maybeNeg(quant(cfg), 0.15);
+    if (r < 0.8 && cfg.level > 0) return Bin(pick(['imp', 'or', 'and']), quant(cfg), rnd() < 0.5 ? quant(cfg) : ground(cfg));
+    return ground(cfg);
+  }
+  function identityFormula() {
+    return pick([
+      Eq('a', 'b'), Not(Eq('a', 'b')),
+      All('x', Imp(P('F', 'x'), Eq('x', 'a'))),
+      Ex('x', And(P('F', 'x'), Eq('x', 'a'))),
+      All('x', Eq('x', 'a')),
+      Ex('x', Not(Eq('x', 'a'))),
+      And(P('F', 'a'), Not(P('F', 'b'))),
+    ]);
+  }
+  function identityGround() {
+    return pick([P('F', 'a'), P('F', 'b'), Not(P('F', 'a')), Not(P('F', 'b')), Eq('a', 'b'), Not(Eq('a', 'b')), P('G', 'a'), P('G', 'b')]);
+  }
+
+  // ---------- Question assembly ----------
+  function treeItems(q) {
+    if (q.type === 'arg') return q.premises.map(f => ({ f, just: 'premise' })).concat([{ f: Not(q.conclusion), just: 'negated conclusion' }]);
+    if (q.type === 'lt') return [{ f: Not(q.formula), just: 'negated formula' }];
+    return q.set.map(f => ({ f, just: 'in set' }));
+  }
+  const formulasOf = q => (q.type === 'arg' ? q.premises.concat([q.conclusion]) : q.type === 'lt' ? [q.formula] : q.set);
+  function verifyModel(q, M) {
+    if (q.type === 'arg') return q.premises.every(f => evalF(f, M)) && !evalF(q.conclusion, M);
+    if (q.type === 'lt') return !evalF(q.formula, M);
+    return q.set.every(f => evalF(f, M));
+  }
+  const distinct = fs => new Set(fs.map(key)).size === fs.length;
+
+  function candidate(logic, type, level, identity) {
+    if (logic === 'prop') {
+      const c = PROP_CFG[level];
+      const gen = d => rp(c.atoms, d);
+      const ok = f => nontrivial(f) && key(f).length <= c.maxLen && size(f) > 1;
+      if (type === 'arg') {
+        const n = randInt(c.prem[0], c.prem[1]);
+        const premises = Array.from({ length: n }, () => gen(c.depth));
+        const conclusion = rnd() < 0.5 ? maybeNeg(P(pick(c.atoms)), 0.3) : gen(c.depth - (level === 'hard' ? 1 : 0));
+        if (!premises.every(ok) || !nontrivial(conclusion) || key(conclusion).length > c.maxLen) return null;
+        return { logic, type, premises, conclusion };
+      }
+      if (type === 'lt') {
+        const f = rnd() < 0.6 ? Imp(gen(c.depth - 1), gen(c.depth - 1)) : gen(c.depth + 1);
+        if (!nontrivial(f) || key(f).length > c.maxLen + 6 || atomsOf([f]).length < 2) return null;
+        return { logic, type, formula: f };
+      }
+      const set = Array.from({ length: randInt(c.set[0], c.set[1]) }, () => gen(c.depth));
+      if (!set.every(ok)) return null;
+      return { logic, type, set };
+    }
+    const c = FO_CFG[level];
+    const useId = identity && rnd() < 0.5;
+    const gen = () => foFormula(c);
+    const len = f => key(f).length <= c.maxLen;
+    if (type === 'arg') {
+      let premises, conclusion;
+      if (useId) {
+        premises = shuffle([identityFormula(), rnd() < 0.6 ? identityGround() : gen()]).slice(0, randInt(1, 2));
+        conclusion = rnd() < 0.7 ? identityGround() : identityFormula();
+      } else {
+        premises = Array.from({ length: randInt(c.prem[0], c.prem[1]) }, gen);
+        conclusion = rnd() < 0.3 ? ground(c) : gen();
+      }
+      if (![...premises, conclusion].every(f => nontrivial(f) && len(f))) return null;
+      return { logic, type, premises, conclusion, identity: useId };
+    }
+    if (type === 'lt') {
+      let f;
+      if (useId) f = Imp(rnd() < 0.5 ? And(identityGround(), identityFormula()) : identityFormula(), identityGround());
+      else f = pickW([['imp', 6], ['or', 2], ['nand', 1]]) === 'imp' ? Imp(gen(), gen()) : rnd() < 0.67 ? Or(gen(), gen()) : Not(And(gen(), gen()));
+      if (!nontrivial(f) || key(f).length > c.maxLen + 12) return null;
+      return { logic, type, formula: f, identity: useId };
+    }
+    const set = Array.from({ length: randInt(c.set[0], c.set[1]) }, gen);
+    if (useId) set[0] = identityFormula();
+    if (useId && set.length > 1) set[1] = identityGround();
+    if (!set.every(f => nontrivial(f) && len(f))) return null;
+    return { logic, type, set, identity: useId };
+  }
+
+  function finish(q, cfg) {
+    const fs = formulasOf(q);
+    if (!distinct(fs)) return null;
+    const tree = prove(treeItems(q), { maxLines: cfg.maxLines, maxNames: cfg.maxNames || 8 });
+    if (tree.aborted || tree.lines > cfg.maxLines) return null;
+    q.tree = tree;
+    // answer: arg -> valid, lt -> logical truth, cons -> consistent
+    q.answer = q.type === 'cons' ? !tree.closed : tree.closed;
+    if (tree.open) {
+      const M = modelFromBranch(tree.open, fs);
+      if (!verifyModel(q, M)) return null;
+      q.model = M;
+    }
+    if (q.logic === 'prop') {
+      // cross-check with truth tables
+      const tt = q.type === 'arg' ? !satisfiable(q.premises.concat([Not(q.conclusion)])) : q.type === 'lt' ? !satisfiable([Not(q.formula)]) : satisfiable(q.set);
+      if (tt !== q.answer) throw new Error('Engine mismatch on ' + fs.map(key).join(', '));
+    }
+    return q;
+  }
+
+  const MIN_EXTRA = { easy: 2, medium: 4, hard: 6 };
+  function generate(opts) {
+    const { logic, type, level } = opts;
+    const identity = logic === 'fo' && !!opts.identity;
+    const cfg = logic === 'prop' ? PROP_CFG[level] : FO_CFG[level];
+    const want = opts.want !== undefined ? opts.want : rnd() < 0.5;
+    const start = Date.now();
+    let fallback = null;
+    for (let i = 0; i < 6000 && Date.now() - start < 1500; i++) {
+      const q0 = candidate(logic, type, level, identity);
+      if (!q0) continue;
+      // cheap prefilter for propositional
+      if (logic === 'prop') {
+        const fs = formulasOf(q0);
+        if (type === 'arg') {
+          if (!satisfiable(q0.premises)) continue;
+          const valid = !satisfiable(q0.premises.concat([Not(q0.conclusion)]));
+          if (valid !== want) continue;
+          if (valid && !satisfiable([Not(q0.conclusion)])) continue; // conclusion a tautology: too easy
+          if (q0.premises.some(p => key(p) === key(q0.conclusion))) continue;
+        } else if (type === 'lt') {
+          if ((!satisfiable([Not(q0.formula)])) !== want) continue;
+          if (!satisfiable([q0.formula])) continue; // skip contradictions
+        } else if (satisfiable(fs) !== want) continue;
+      }
+      if (type === 'arg') {
+        const pp = new Set(); q0.premises.forEach(f => predsIn(f, new Map()).forEach((a, p) => pp.add(p)));
+        if ([...predsIn(q0.conclusion, new Map()).keys()].some(p => !pp.has(p))) continue;
+      }
+      const q = finish(q0, cfg);
+      if (!q) continue;
+      const nItems = treeItems(q).length;
+      if (q.tree.lines < nItems + MIN_EXTRA[level]) continue;
+      if (logic === 'fo') {
+        if (type === 'arg' && q.premises.some(p => key(p) === key(q.conclusion))) continue;
+        if (type === 'arg' && q.answer) {
+          const pt = prove(q.premises.map(f => ({ f, just: '' })), { maxLines: cfg.maxLines, maxNames: cfg.maxNames });
+          if (pt.aborted || pt.closed) continue; // premises must be consistent
+        }
+      }
+      if (q.answer === want) return q;
+      if (!fallback) fallback = q;
+    }
+    return fallback;
+  }
+
+  return { generate, show, key, prove, evalF, Not, P, Eq, And, Or, Imp, All, Ex, PROP_CFG, FO_CFG };
+})();
+if (typeof module !== 'undefined') module.exports = LogicEngine;
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const E = LogicEngine;
+  const $ = s => document.querySelector(s);
+  const sheet = $('#sheet');
+  const state = { q: null, answered: false, step: null, total: 0, correct: 0 };
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem('ttt-' + k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('ttt-' + k, JSON.stringify(v)); } catch (e) { } },
+  };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const val = n => document.querySelector(`input[name="${n}"]:checked`).value;
+
+  // restore settings
+  const saved = store.get('settings');
+  if (saved) {
+    ['logic', 'type', 'level'].forEach(n => { const el = document.getElementById(n + '-' + saved[n]); if (el) el.checked = true; });
+    $('#identity').checked = !!saved.identity;
+  }
+  const sc = store.get('score');
+  if (sc) { state.total = sc.total || 0; state.correct = sc.correct || 0; }
+
+  function syncControls() {
+    const fo = val('logic') === 'fo';
+    $('#identity').disabled = !fo;
+    $('#idWrap').classList.toggle('disabled', !fo);
+    $('#ltLabel').textContent = fo ? 'Logical truth' : 'Tautology';
+    store.set('settings', { logic: val('logic'), type: val('type'), level: val('level'), identity: $('#identity').checked });
+  }
+  function updateScore() {
+    $('#scoreText').innerHTML = state.total ? `<strong>${state.correct}</strong> correct out of <strong>${state.total}</strong>` : 'No answers yet';
+    $('#resetScore').hidden = !state.total;
+    store.set('score', { total: state.total, correct: state.correct });
+  }
+  $('#resetScore').addEventListener('click', () => { state.total = 0; state.correct = 0; updateScore(); });
+
+  const LABELS = {
+    arg: { title: 'Is this argument valid?', yes: 'Valid', no: 'Invalid' },
+    lt: { title: q => q.logic === 'prop' ? 'Is this formula a tautology?' : 'Is this formula a logical truth?', yes: q => q.logic === 'prop' ? 'Tautology' : 'Logical truth', no: q => q.logic === 'prop' ? 'Not a tautology' : 'Not a logical truth' },
+    cons: { title: 'Is this set of formulas consistent?', yes: 'Consistent', no: 'Inconsistent' },
+  };
+  const lab = (q, k) => { const v = LABELS[q.type][k]; return typeof v === 'function' ? v(q) : v; };
+
+  function questionHTML(q) {
+    if (q.type === 'arg') {
+      return `<div class="argument logic">${q.premises.map(f => `<div>${esc(E.show(f))}</div>`).join('')}<div class="bar" aria-hidden="true"></div><div><span aria-label="therefore">∴</span>&nbsp; ${esc(E.show(q.conclusion))}</div></div>`;
+    }
+    if (q.type === 'lt') return `<div class="single logic">${esc(E.show(q.formula))}</div>`;
+    return `<div class="setlist logic">${q.set.map(f => `<span>${esc(E.show(f))}</span>`).join('')}</div>`;
+  }
+
+  function newQuestion() {
+    syncControls();
+    state.answered = false; state.step = null;
+    sheet.innerHTML = '<p class="loading">Writing a question…</p>';
+    setTimeout(() => {
+      let type = val('type');
+      if (type === 'mix') type = ['arg', 'lt', 'cons'][Math.floor(Math.random() * 3)];
+      let q = null;
+      try { q = E.generate({ logic: val('logic'), type, level: val('level'), identity: $('#identity').checked }); } catch (e) { console.error(e); }
+      if (!q) { sheet.innerHTML = '<p class="loading">No question came out this time. Press New question to try again.</p><div class="actions"><span></span><button class="btn btn-primary" id="next" type="button">New question</button></div>'; $('#next').onclick = newQuestion; return; }
+      state.q = q;
+      renderQuestion();
+    }, 20);
+  }
+
+  function renderQuestion() {
+    const q = state.q;
+    const tags = [q.logic === 'prop' ? 'Propositional' : 'First-order', val('level')[0].toUpperCase() + val('level').slice(1)];
+    if (q.identity) tags.push('Identity');
+    sheet.innerHTML = `
+      <div class="qhead"><h2>${esc(lab(q, 'title'))}</h2><div class="tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div></div>
+      <div class="qbody">${questionHTML(q)}</div>
+      <div class="answers" role="group" aria-label="Your answer">
+        <button class="btn btn-ghost" type="button" data-ans="yes" id="ansYes">${esc(lab(q, 'yes'))}</button>
+        <button class="btn btn-ghost" type="button" data-ans="no" id="ansNo">${esc(lab(q, 'no'))}</button>
+      </div>
+      <div id="fb"></div>
+      <div id="modelSlot"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" type="button" id="reveal">Show model answer</button>
+        <button class="btn btn-primary" type="button" id="next">New question</button>
+      </div>`;
+    sheet.querySelectorAll('[data-ans]').forEach(b => b.addEventListener('click', () => answer(b.dataset.ans === 'yes', b)));
+    $('#reveal').addEventListener('click', () => showModel(true));
+    $('#next').addEventListener('click', newQuestion);
+  }
+
+  function verdictSentence(q) {
+    const fo = q.logic === 'fo', y = q.answer;
+    if (q.type === 'arg') return y ? 'this argument is valid.' : 'this argument is invalid.';
+    if (q.type === 'lt') return `this formula is ${y ? '' : 'not '}${fo ? 'a logical truth' : 'a tautology'}.`;
+    return y ? 'this set is consistent.' : 'this set is inconsistent.';
+  }
+  function answer(yes, btn) {
+    if (state.answered) return;
+    state.answered = true;
+    const q = state.q, right = yes === q.answer;
+    state.total++; if (right) state.correct++;
+    updateScore();
+    sheet.querySelectorAll('[data-ans]').forEach(b => (b.disabled = true));
+    btn.disabled = false;
+    btn.classList.add(right ? 'picked-right' : 'picked-wrong');
+    $('#fb').innerHTML = `<div class="feedback ${right ? 'right' : 'wrong'}">${right ? 'Correct' : 'Not quite'}: ${esc(verdictSentence(q))} The model answer below shows why.</div>`;
+    showModel(false);
+  }
+
+  // ---- tree rendering ----
+  function minN(node) { return node.lines.length ? node.lines[0].n : Math.min(minN(node.kids[0]), minN(node.kids[1])); }
+  function lastN(node) { return node.lines.length ? node.lines[node.lines.length - 1].n : 0; }
+  function nodeHTML(node) {
+    let h = '<div class="tn"><div class="tlines">';
+    for (const l of node.lines) {
+      const tick = l.tick ? `<span class="tk" data-req="${l.tickAt || l.n}" aria-label="ticked">✓</span>` : '';
+      h += `<div class="tl" data-req="${l.n}"><span class="ln">${l.n}.</span><span class="fm"><span class="tf">${esc(l.text)}</span>${tick}</span><span class="tj">${esc(l.just)}</span></div>`;
+    }
+    h += '</div>';
+    if (node.end) {
+      if (node.end.closed) h += `<div class="te closed" data-req="${lastN(node)}">✗ ${node.end.by.join(', ')}</div>`;
+      else h += `<div class="te open${node.end.countermodel ? ' cm' : ''}" data-req="${lastN(node)}">○ open${node.end.countermodel ? ' · countermodel' : ''}</div>`;
+    }
+    if (node.kids) h += `<div class="kids" data-req="${minN(node)}">${node.kids.map(k => `<div class="kid">${nodeHTML(k)}</div>`).join('')}</div>`;
+    return h + '</div>';
+  }
+  function kidsReq(node) { return node.kids ? Math.min(minN(node.kids[0]), minN(node.kids[1])) : 0; }
+  function fixKids(root, el) {
+    // set each .kids container's requirement to the first line number inside it
+    const conts = el.querySelectorAll('.kids');
+    conts.forEach(c => { const ns = [...c.querySelectorAll('.tl')].map(x => +x.dataset.req); c.dataset.req = Math.min(...ns); });
+  }
+  function applyStep(el, k) {
+    el.querySelectorAll('[data-req]').forEach(x => x.classList.toggle('pending', k !== null && +x.dataset.req > k));
+  }
+
+  function modelHTML(q) {
+    const M = q.model;
+    if (!M) return '';
+    const fo = q.logic === 'fo';
+    let rows = '';
+    if (!fo) {
+      const atoms = Object.keys(M.props).sort();
+      rows = atoms.map(a => `<dt class="logic">${a}</dt><dd>${M.fixed[a] ? (M.props[a] ? 'T' : 'F') : 'T or F <span class="note">(not settled by the branch)</span>'}</dd>`).join('');
+    } else {
+      rows += `<dt>Domain</dt><dd>{${M.domain.join(', ')}}</dd>`;
+      const names = Object.keys(M.ref).sort();
+      if (names.length) rows += `<dt>Names</dt><dd>${names.map(n => `${n} ↦ ${M.ref[n]}`).join(', ')}</dd>`;
+      [...M.preds.entries()].filter(([p]) => p !== '=').sort().forEach(([p, ar]) => {
+        if (ar === 0) { rows += `<dt class="logic">${p}</dt><dd>${M.props[p] ? 'T' : 'F'}</dd>`; return; }
+        const items = [...M.ext[p]].sort().map(t => (ar === 1 ? t : '⟨' + t.split(',').join(', ') + '⟩'));
+        rows += `<dt class="logic">${p}</dt><dd>{${items.join(', ')}}</dd>`;
+      });
+    }
+    const what = q.type === 'arg' ? 'the premises are true and the conclusion is false' : q.type === 'lt' ? 'the formula is false' : 'every formula in the set is true';
+    return `<div class="cmodel"><span class="title">${fo ? 'Model' : 'Valuation'} read off the open branch</span><dl>${rows}</dl><p class="note">On this ${fo ? 'model' : 'valuation'}, ${what}.${fo ? ' Every name that refers to an object is listed with its referent; atomic sentences not on the branch are false.' : ''}</p></div>`;
+  }
+
+  function explainText(q) {
+    const fo = q.logic === 'fo';
+    const start = q.type === 'arg' ? 'The tree starts from the premises together with the negation of the conclusion.' : q.type === 'lt' ? 'The tree starts from the negation of the formula.' : 'The tree starts from the members of the set.';
+    if (q.tree.closed) {
+      if (q.type === 'arg') return start + ' Every branch closes, so the premises cannot all be true while the conclusion is false. The argument is valid.';
+      if (q.type === 'lt') return start + ` Every branch closes, so the formula cannot be false. It is ${fo ? 'a logical truth' : 'a tautology'}.`;
+      return start + ' Every branch closes, so the formulas cannot all be true together. The set is inconsistent.';
+    }
+    const tail = q.type === 'arg' ? 'so the argument is invalid.' : q.type === 'lt' ? `so the formula is not ${fo ? 'a logical truth' : 'a tautology'}.` : 'so the set is consistent.';
+    return start + ' The branch marked “countermodel” is complete (every rule that can be applied has been) and it stays open, ' + tail;
+  }
+
+  function showModel(fromButton) {
+    const q = state.q, slot = $('#modelSlot');
+    if (slot.dataset.shown) { slot.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    slot.dataset.shown = '1';
+    $('#reveal').hidden = true;
+    if (fromButton && !state.answered) {
+      state.answered = true;
+      sheet.querySelectorAll('[data-ans]').forEach(b => (b.disabled = true));
+    }
+    const yes = q.answer;
+    slot.innerHTML = `<div class="model">
+      <div style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between">
+        <h3>Model answer</h3><span class="verdict ${yes ? 'yes' : 'no'}">${esc(yes ? lab(q, 'yes') : lab(q, 'no'))}</span>
+      </div>
+      <p class="explain">${esc(explainText(q))}</p>
+      <div class="stepper">
+        <button class="btn btn-ghost" type="button" id="stepStart">Step through</button>
+        <button class="btn btn-ghost" type="button" id="stepNext" hidden>Next line</button>
+        <button class="btn btn-ghost" type="button" id="stepAll" hidden>Show whole tree</button>
+        <span class="count" id="stepCount"></span>
+      </div>
+      <div class="treebox"><div class="tree" id="tree">${nodeHTML(q.tree.root)}</div></div>
+      ${modelHTML(q)}
+    </div>`;
+    const treeEl = $('#tree');
+    fixKids(q.tree.root, treeEl);
+    const box = treeEl.parentElement;
+    if (box.scrollWidth > box.clientWidth + 2) {
+      box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2;
+      const hint = document.createElement('p'); hint.className = 'note'; hint.textContent = 'This tree is wider than your screen: scroll sideways inside the box to see all of it.';
+      box.after(hint);
+    }
+    const total = q.tree.lines, firstStep = q.type === 'arg' ? q.premises.length + 1 : q.type === 'lt' ? 1 : q.set.length;
+    const setStep = k => {
+      state.step = k;
+      applyStep(treeEl, k);
+      const stepping = k !== null;
+      $('#stepStart').textContent = stepping ? 'Start again' : 'Step through';
+      $('#stepNext').hidden = !stepping; $('#stepAll').hidden = !stepping;
+      $('#stepNext').disabled = stepping && k >= total;
+      $('#stepCount').textContent = stepping ? `Line ${Math.min(k, total)} of ${total}` : `${total} lines`;
+    };
+    $('#stepStart').onclick = () => setStep(firstStep);
+    $('#stepNext').onclick = () => setStep(Math.min(total, state.step + 1));
+    $('#stepAll').onclick = () => setStep(null);
+    setStep(null);
+  }
+
+  document.querySelectorAll('.settings input').forEach(i => i.addEventListener('change', newQuestion));
+  updateScore();
+  newQuestion();
+})();
+</script>
+
+</body>
+</html>
